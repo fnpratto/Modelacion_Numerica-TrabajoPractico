@@ -108,8 +108,6 @@ def calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min):
 
     return Q_max * math.sqrt(argumento)
 
-###
-
 # Qmax = mcubico/hora
 # delta m
 
@@ -122,8 +120,8 @@ def calcular_altura_agua(V, A_so):
     return V / A_so
 
 #ecuacion 6
-#def calcular_cambio_coef_infiltracion(V, V_total, V_t, C_sat, C):
-#    return (V / (V_total * V_t) * (C_sat - C))
+def cambio_coef_infiltracion(V, V_total, V_t, C_sat, C):
+    return (V / (V_so * t_k) * (C_sat - C))
 
 """## Modelacion del sistema
 
@@ -158,9 +156,26 @@ def calcular_cambio_coeficiente_infiltracion(V, C, delta_t ):
 
     return cambio_coeficiente
 
-"""Donde $\Delta C$ es el cambio en el coeficiente de infiltración
+"""
 
-Ahora vamos a utilizar la fórmula del método de Euler para actualizar el volumen en cada paso de tiempo hasta que se alcance el tiempo total de la tormenta (60 minutos en este caso)
+Donde $\Delta C$ es el cambio en el coeficiente de infiltración
+"""
+
+def euler(V_t,H_0,C,intensidad,delta_t):
+    H = calcular_altura_agua(V_t, A_so)
+    Delta_H = calcular_desnivel(H_0, H)
+    Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
+    Q_in = calcular_caudal_entrada(C, intensidad, A_terr)
+    delta_V = calcular_cambio_volumen(Q_in, Q_out, delta_t)
+    delta_C = calcular_cambio_coeficiente_infiltracion(V_t, C, delta_t)
+
+    C += delta_C
+    V_t += delta_V
+
+    return V_t, C, H
+
+"""Ahora vamos a utilizar la fórmula del método de Euler para actualizar el volumen en cada paso de tiempo hasta que se alcance el tiempo total de la tormenta (60 minutos en este caso)
+
 """
 
 import matplotlib.pyplot as plt
@@ -206,14 +221,57 @@ Es similar pero no igual :(
 **A.2) Discretización de las Ecuaciones 1 y 6 con Método de Euler (Variables C y $Q_{\text{sal}}$)}**
 
 Para determinar un lapso suficiente para que se vacíe el sótano, podrías graficar la evolución del volumen de agua en el sótano en función del tiempo. Esto te permitirá visualizar cómo cambia el volumen de agua a lo largo del tiempo y determinar cuándo alcanza un valor cercano a cero.
+
+Simulamos como seria Euler
 """
 
 Q_max = 8
 
-def simular_precipitacion(intensidad, duracion):
+def simular_precipitacion_euler(intensidad, duracion,delta_t):
     V_t = 0         # Volumen total
     t = 0           # Iterador
-    delta_t = 1/60  # Paso de tiempo en horas
+    H_0 = 0         # Altura inicial del sótano
+    C = C_0         # Coeficiente de infiltración inicial
+
+    tiempos = []
+    alturas = []
+    Q_outs = []
+    Cs = []
+    Q_ins = []
+    Vs = []
+
+    while t <= duracion:
+
+        H = calcular_altura_agua(V_t, A_so)
+        Delta_H = calcular_desnivel(H_0, H)
+        Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
+        Q_in = calcular_caudal_entrada(C, intensidad, A_terr)
+        delta_V = calcular_cambio_volumen(Q_in, Q_out, delta_t)
+        delta_C = calcular_cambio_coeficiente_infiltracion(V_t, C, delta_t)
+
+        C += delta_C
+        V_t += delta_V
+        if V_t <0:
+          V_t = 0
+        H_0 = H
+        t += delta_t
+
+        tiempos.append(t)
+        alturas.append(H)
+        Q_outs.append(Q_out)
+        Cs.append(C)
+        Q_ins.append(Q_in)
+        Vs.append(V_t)
+
+    return tiempos, alturas, Q_outs, Cs, Q_ins, Vs ,V_t, C,t
+
+"""Aca definimos la simulacion pero esperando hasta que se agote el sotano"""
+
+Q_max = 8
+
+def simular_precipitacion_euler_hasta_vaciar(intensidad, duracion,delta_t):
+    V_t = 0         # Volumen total
+    t = 0           # Iterador
     H_0 = 0         # Altura inicial del sótano
     C = C_0         # Coeficiente de infiltración inicial
 
@@ -248,10 +306,7 @@ def simular_precipitacion(intensidad, duracion):
         Vs.append(V_t)
 
 
-    while  t <= (duracion*2):
-
-        if V_t <=0:
-          break
+    while   V_t >0:
 
         H = calcular_altura_agua(V_t, A_so) #esta en metros
         Delta_H = calcular_desnivel(H_0, H)
@@ -274,12 +329,16 @@ def simular_precipitacion(intensidad, duracion):
         Q_ins.append(Q_in)
         Vs.append(V_t)
 
-    return tiempos, alturas, Q_outs, Cs, Q_ins, Vs ,V_t, C
+    return tiempos, alturas, Q_outs, Cs, Q_ins, Vs ,V_t, C,t
 
 # Simular para todas las intensidades y duraciones de precipitación
+delta_t = 1/60
+tiempos_vaciado = []
 for i, intensidad in enumerate(intensidades):
     duracion = duraciones[i]
-    tiempos, alturas, Q_outs, Cs, Q_ins, Vs, rta_Vt, rta_C = simular_precipitacion(intensidad, duracion)
+    tiempos, alturas, Q_outs, Cs, Q_ins, Vs, rta_Vt, rta_C, rta_T = simular_precipitacion_euler_hasta_vaciar(intensidad, duracion,delta_t)
+
+    tiempos_vaciado.append(rta_T)
 
     print(f"duracion{i}")
     print(f"Intensidad: {intensidad} mm/h, Duración: {duracion*60} min\n")
@@ -320,6 +379,27 @@ for i, intensidad in enumerate(intensidades):
 
     plt.tight_layout()
     plt.show()
+
+# Crear una tabla con los tiempos de vaciado
+import pandas as pd
+
+datos_tabla = {
+    "Intensidad (mm/h)": intensidades,
+    "Duración (min)": [dur * 60 for dur in duraciones],
+    "Tiempo para vaciar el sótano (horas)": tiempos_vaciado
+}
+
+
+tabla_vaciado = pd.DataFrame(datos_tabla)
+#print(tabla_vaciado)
+
+# Graficar tabla de tiempos de vaciado
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.axis('tight')
+ax.axis('off')
+ax.table(cellText=tabla_vaciado.values, colLabels=tabla_vaciado.columns, cellLoc='center', loc='center')
+
+plt.show()
 
 """**B) Dimensionamiento de la bomba**
 
@@ -432,6 +512,8 @@ for i, intensidad in enumerate(intensidades):
 
 
     max_Q_deseado = max(vector_Q_deseados)
+
+    ##no agarra el mayor de ese vector despues hay que arreglarlo
     print(f'La máxima Q_deseado es: {max_Q_deseado} m³/h\n')
 
 """**C) Experimentación con distintos esquemas**
@@ -442,100 +524,143 @@ Implementamos el método de Runge-Kutta de orden 2 y lo comparamos con Euler.
 
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
+##nuevas ecuaciones para RK-2
 
-# Definición de las ecuaciones diferenciales
-def dV_dt(Q_in, Q_out):
-    return calcular_tasa_cambio_volumen(Q_in, Q_out)
+#ecuacion 9
+def calcular_volumen_k2_rk2(Q_in, Q_out_rk2,k1_V, delta_t):
+  return ( delta_t * ((Q_in - Q_out_rk2) + k1_V / 2) )
 
-def dC_dt(V, V_sotano, t_k, C_saturado, C):
-    return (V / (V_sotano * t_k)) * (C_saturado - C)
+#ecuacion 10
+def calcular_c_k2_rk2(V_t, k1_V, C,k1_C,delta_t):
+  return ( delta_t * ((V_t + k1_V / 2) / (V_so * t_k) * (C_sat - (C + k1_C / 2))) )
 
-# Implementación del método de Runge-Kutta de segundo orden (RK-2)
-def runge_kutta_2(Q_in, Q_out, V, V_sotano, t_k, C_saturado, C, dt):
-    k1_V = dt * dV_dt(Q_in, Q_out)
-    k1_C = dt * dC_dt(V, V_sotano, t_k, C_saturado, C)
+def runge_kutta_2(V_t, C, H_0, intensidad, delta_t):
+    H = calcular_altura_agua(V_t, A_so)
+    Delta_H = calcular_desnivel(H_0, H)
+    Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
+    Q_in = calcular_caudal_entrada(C, intensidad, A_terr)
 
-    k2_V = dt * dV_dt(Q_in, Q_out + k1_V)
-    k2_C = dt * dC_dt(V, V_sotano, t_k, C_saturado, C + k1_C)
+    k1_V = calcular_cambio_volumen(Q_in, Q_out, delta_t)
+    k1_C = calcular_cambio_coeficiente_infiltracion(V_t, C, delta_t)
 
-    V_new = V + 0.5 * (k1_V + k2_V)
-    C_new = C + 0.5 * (k1_C + k2_C)
-
-    return V_new, C_new
-
-# Parámetros de la simulación
-delta_t = 1/60  # Paso de tiempo en horas
-num_steps = 60  # Número de pasos de tiempo
-V_t = 0
-t = 0
-H_0 = 0
-C= C_0
-
-# Simulación usando RK-2
-for step in range(num_steps):
-    H_rk2 = calcular_altura_agua(V_t, A_so) #esta en metros
-    Delta_H = calcular_desnivel(H_0, H_rk2)
-    Q_out_rk2 = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
-    Q_in = calcular_caudal_entrada(C, 85, A_terr)
-    k1_V = delta_t * (Q_in - Q_out_rk2)
-    k1_C = delta_t * (V_t / (A_so * t_k) * (C_sat - C))
-
-    k2_V = delta_t * ((Q_in - Q_out_rk2) + k1_V / 2) #Delta_V
-    k2_C = delta_t * ((V_t + k1_V / 2) / (A_so * t_k) * (C_sat - (C + k1_C / 2))) ## delta_C
+    k2_V = calcular_cambio_volumen(Q_in, Q_out + k1_V / 2, delta_t)
+    k2_C = calcular_cambio_coeficiente_infiltracion(V_t + k1_V / 2, C + k1_C / 2, delta_t)
 
     V_t += k2_V
     C += k2_C
+    return V_t, C, H
 
-# Resultados finales
-print(f"Volumen final usando RK-2: {V_t:.2f} m^3")
-print(f"Coeficiente de infiltración final usando RK-2: {C:.2f}")
+# Simulación usando RK-2
+def simular_runge_kutta_2(intensidad, delta_t, duracion):
+  H_0 = 0
+  V_t = 0
+  t = 0
+  C = C_0
 
-"""Recordemos numeros dados en el punto A.2 para intensidad 60 minutos"""
+  tiempos = []
+  alturas = []
+  Q_outs = []
+  Cs = []
+  Q_ins = []
+  Vs = []
 
-def simular_precipitacion(intensidad, duracion):
-    Q_max = 8
-    V_t = 0         # Volumen total
-    t = 0           # Iterador
-    delta_t = 1/60  # Paso de tiempo en horas
-    H_0 = 0         # Altura inicial del sótano
-    C = C_0         # Coeficiente de infiltración inicial
+  while t <= duracion :
+    H = calcular_altura_agua(V_t, A_so)
+    Delta_H = calcular_desnivel(H_0, H)
+    Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
+    Q_in = calcular_caudal_entrada(C, intensidad, A_terr)
 
-    while t <= duracion :
+    k1_V = calcular_cambio_volumen(Q_in, Q_out, delta_t)
+    k1_C = calcular_cambio_coeficiente_infiltracion(V_t, C, delta_t)
 
-        H = calcular_altura_agua(V_t, A_so)
-        Delta_H = calcular_desnivel(H_0, H)
-        Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
-        Q_in = calcular_caudal_entrada(C, intensidad, A_terr)
-        delta_V = calcular_cambio_volumen(Q_in, Q_out, delta_t)
-        delta_C = calcular_cambio_coeficiente_infiltracion(V_t, C, delta_t)
+    k2_V = calcular_cambio_volumen(Q_in, Q_out + k1_V / 2, delta_t)
+    k2_C = calcular_cambio_coeficiente_infiltracion(V_t + k1_V / 2, C + k1_C / 2, delta_t)
 
-        V_t += delta_V
-        C += delta_C
-        t += delta_t
-        H_0 = H
+    V_t += k2_V
+    C += k2_C
+    if V_t < 0:
+      V_t = 0
+    t += delta_t
+    H_0 = H
 
 
-    return V_t, C
+    tiempos.append(t)
+    alturas.append(H_0)
+    Q_outs.append(Q_out)
+    Cs.append(C)
+    Q_ins.append(Q_in)
+    Vs.append(V_t)
 
-# Simular para todas las intensidades y duraciones de precipitación
-rta_Vt, rta_C = simular_precipitacion(85, 60)
-print(f"Volumen Resultado: {rta_Vt:.2f} m³\n")
-print(f"Coef de precipitación Resultado: {rta_C}\n")
+    return tiempos, alturas, Q_outs, Cs, Q_ins, Vs, V_t, C
 
-"""# El método de Runge-Kutta de orden 4 (RK4)"""
+"""Teniendo RK-2 procedemos a tambien usar euler con diferentes pasos (un delta_t de un minuto para rk-2. 30minutos y 5 minutos para euler)
+
+Comparacion de como evoluciona el volumen y el coeficiente en el tiempo con RK-2 con psao 1/60 Y EULER con paso 1/30 y 5/60
+"""
+
+intensidad = 85
+duracion = 60
+V_t = 0
+H_0 = 0
+
+# Simular con ambos métodos
+resultados_rk2 = simular_runge_kutta_2(intensidad, 1/60, duracion)
+resultados_euler1 = simular_precipitacion_euler(intensidad, duracion,1/30)
+resultados_euler2 = simular_precipitacion_euler(intensidad, duracion,5/60)
+
+# Graficar resultados
+plt.figure(figsize=(14, 7))
+
+# Volumen a través del tiempo
+plt.subplot(1, 2, 1)
+tiempos_rk2, alturas, Q_outs, coeficientes_rk2, Q_ins, volumenes_rk2 , V_t, C = resultados_rk2
+plt.plot(tiempos_rk2, volumenes_rk2, label='RK-2 (Exacta)')
+
+tiempos_euler1, alturas, Q_outs, Cs_euler, Q_ins, volumenes_euler1 ,V_t, C,t =  resultados_euler1
+plt.plot(tiempos_euler1, volumenes_euler1, label=f'Euler Δt={1/30:.2f} horas')
+
+tiempos_euler2, alturas, Q_outs, Cs_euler, Q_ins, volumenes_euler2 ,V_t, C ,t= resultados_euler2
+plt.plot(tiempos_euler2, volumenes_euler2, label=f'Euler Δt={5/60:.2f} horas')
+
+plt.xlabel('Tiempo (horas)')
+plt.ylabel('Volumen (m³)')
+plt.title('Comparación de Volumen de Agua')
+plt.legend()
+plt.grid(True)
+
+# Coeficiente de infiltración a través del tiempo
+plt.subplot(1, 2, 2)
+plt.plot(tiempos_rk2, coeficientes_rk2, label='RK-2 (Exacta)')
+
+plt.plot(tiempos_euler1, resultados_euler1[3], label=f'Euler Δt={1/30:.2f} horas')
+plt.plot(tiempos_euler2, resultados_euler2[3], label=f'Euler Δt={5/60:.2f} horas')
+
+plt.xlabel('Tiempo (horas)')
+plt.ylabel('Coeficiente de infiltración')
+plt.title('Comparación de Coeficiente de Infiltración')
+plt.legend()
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
+
+"""#  D) Conclusiones
+
+Presente sus conclusiones del trabajo práctico. En particular, comente sobre la relación problema físico-problema numérico, los tipos de errores involucrados en la resolución del problema numérico, la importancia/efecto de cada uno, estabilidad y consistencia.
+
+**El método de Runge-Kutta de orden 4 (RK4)**
+"""
 
 def derivadas(V, C, H_0, intensidad):
     H = calcular_altura_agua(V, A_so)
     Delta_H = calcular_desnivel(H_0, H)
     Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
     Q_in = calcular_caudal_entrada(C, intensidad, A_terr)
-    dV = Q_in - Q_out
+    dV = calcular_tasa_cambio_volumen(Q_in,Q_out)
     dC = calcular_cambio_coeficiente_infiltracion(V, C, 1)
     return dV, dC
 
-def rk4_step(V, C, H_0, intensidad, delta_t):
+def runge_kutta_4(V, C, H_0, intensidad, delta_t):
     dV1, dC1 = derivadas(V, C, H_0, intensidad)
     dV2, dC2 = derivadas(V + 0.5 * delta_t * dV1, C + 0.5 * delta_t * dC1, H_0, intensidad)
     dV3, dC3 = derivadas(V + 0.5 * delta_t * dV2, C + 0.5 * delta_t * dC2, H_0, intensidad)
@@ -546,10 +671,9 @@ def rk4_step(V, C, H_0, intensidad, delta_t):
 
     return V_new, C_new
 
-def simular_precipitacion(intensidad, duracion):
+def simular_precipitacion_rk(intensidad, duracion, delta_t):
     V_t = 0         # Volumen total
     t = 0           # Iterador
-    delta_t = 1/60  # Paso de tiempo en horas
     H_0 = 0         # Altura inicial del sótano
     C = C_0         # Coeficiente de infiltración inicial
 
@@ -562,7 +686,16 @@ def simular_precipitacion(intensidad, duracion):
 
     # Simulación durante la precipitación
     while t <= duracion:
-        V_t, C = rk4_step(V_t, C, H_0, intensidad, delta_t)
+        V = V_t
+        dV1, dC1 = derivadas(V, C, H_0, intensidad)
+        dV2, dC2 = derivadas(V + 0.5 * delta_t * dV1, C + 0.5 * delta_t * dC1, H_0, intensidad)
+        dV3, dC3 = derivadas(V + 0.5 * delta_t * dV2, C + 0.5 * delta_t * dC2, H_0, intensidad)
+        dV4, dC4 = derivadas(V + delta_t * dV3, C + delta_t * dC3, H_0, intensidad)
+
+        V_t = V + (delta_t / 6.0) * (dV1 + 2 * dV2 + 2 * dV3 + dV4)
+        C_f = C + (delta_t / 6.0) * (dC1 + 2 * dC2 + 2 * dC3 + dC4)
+        if V_t < 0:
+          V_t = 0
         H = calcular_altura_agua(V_t, A_so)
         Delta_H = calcular_desnivel(H_0, H)
         Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
@@ -570,26 +703,7 @@ def simular_precipitacion(intensidad, duracion):
 
         t += delta_t
         H_0 = H
-
-        tiempos.append(t)
-        alturas.append(H)
-        Q_outs.append(Q_out)
-        Cs.append(C)
-        Q_ins.append(Q_in)
-        Vs.append(V_t)
-
-    # Simulación después de la precipitación (desagote)
-    while t <= (duracion*2) :
-        V_t, C = rk4_step(V_t, C, H_0, 0, delta_t)  # Intensidad es 0 después de la lluvia
-        if V_t < 0:
-          break
-        H = calcular_altura_agua(V_t, A_so)
-        Delta_H = calcular_desnivel(H_0, H)
-        Q_out = calcular_caudal_salida(Q_max, Delta_H, Delta_H_max, Delta_H_min)
-        Q_in = 0  # Caudal de entrada es cero durante el desagote
-
-        t += delta_t
-        H_0 = H
+        C= C_f
 
         tiempos.append(t)
         alturas.append(H)
@@ -600,43 +714,52 @@ def simular_precipitacion(intensidad, duracion):
 
     return tiempos, alturas, Q_outs, Cs, Q_ins, Vs, V_t, C
 
+"""Ahora presentamos el metodo RK-4 con todas las intensidades con su duracion respectiva
+
+A continuacion para la conclusion vamos a agregar un grafico con todos los metodos juntos en un solo grafico asi podemos comparar.
+"""
+
+# Simular para todas las intensidades y duraciones de precipitación
+delta_t = 1/60
+
 for i, intensidad in enumerate(intensidades):
     duracion = duraciones[i]
-    tiempos, alturas, Q_outs, Cs, Q_ins, Vs, rta_Vt, rta_C = simular_precipitacion(intensidad, duracion)
-
-    print(f"Duración {i + 1}")
-    print(f"Intensidad: {intensidad} mm/h, Duración: {duracion * 60} min\n")
-    print(f"Volumen Resultado: {rta_Vt:.2f} m³\n")
-    print(f"Coeficiente de infiltración Resultado: {rta_C}\n")
-    print(f"Volumen de lluvia para la duración de la precipitación: {intensidad * A_terr * duracion / 1000:.2f} m³\n")
-    print(f"---> Diferencia entre volumen de lluvia y volumen almacenado: {(intensidad * A_terr * duracion / 1000) - rta_Vt:.2f} m³\n")
-    print(f"\n")
-
+    tiempos_rk2, alturas_rk2, Q_outs_rk2, Cs_rk2, Q_ins_rk2, Vs_rk2,Vs_final, C_final = simular_runge_kutta_2(intensidades[i], duracion,delta_t)
+    tiempos_rk4, alturas_rk4, Q_outs_rk4, Cs_rk4, Q_ins_rk4, Vs_rk4 , Vs_final, C_final = simular_precipitacion_rk(intensidades[i], duracion,delta_t)
+    tiempos_euler, alturas_euler, Q_outs_euler, Cs_euler, Q_ins_euler, Vs_euler,V_t, C,t = simular_precipitacion_euler(intensidades[i], duracion,delta_t)
     plt.figure(figsize=(12, 8))
 
     plt.subplot(2, 2, 1)
-    plt.plot(tiempos, Q_outs, label='Q_out')
+    plt.plot(tiempos_euler, Q_outs_euler, label='Q_out (Euler)')
+    plt.plot(tiempos_rk2, Q_outs_rk2, label='Q_out (RK2)')
+    plt.plot(tiempos_rk4, Q_outs_rk4, label='Q_out (RK4)')
     plt.xlabel('Tiempo (horas)')
     plt.ylabel('Q_out (m³/h)')
     plt.title('Caudal de Salida Q_out')
     plt.legend()
 
     plt.subplot(2, 2, 2)
-    plt.plot(tiempos, Cs, label='C')
+    plt.plot(tiempos_euler, Cs_euler, label='C (Euler)')
+    plt.plot(tiempos_rk2, Cs_rk2, label='C (RK2)')
+    plt.plot(tiempos_rk4, Cs_rk4, label='C (RK4)')
     plt.xlabel('Tiempo (horas)')
     plt.ylabel('C')
     plt.title('Coeficiente de Infiltración C')
     plt.legend()
 
     plt.subplot(2, 2, 3)
-    plt.plot(tiempos, Q_ins, label='Q_in')
+    plt.plot(tiempos_euler, Q_ins_euler, label='Q_in (Euler)')
+    plt.plot(tiempos_rk2, Q_ins_rk2, label='Q_in (RK2)')
+    plt.plot(tiempos_rk4, Q_ins_rk4, label='Q_in (RK4)')
     plt.xlabel('Tiempo (horas)')
     plt.ylabel('Q_in (m³/h)')
     plt.title('Caudal de Entrada Q_in')
     plt.legend()
 
     plt.subplot(2, 2, 4)
-    plt.plot(tiempos, Vs, label='Volumen V_t')
+    plt.plot(tiempos_euler, Vs_euler, label='Volumen V_t (Euler)')
+    plt.plot(tiempos_rk2, Vs_rk2, label='Volumen V_t (RK2)')
+    plt.plot(tiempos_rk4, Vs_rk4, label='Volumen V_t (RK4)')
     plt.xlabel('Tiempo (horas)')
     plt.ylabel('Volumen (m³)')
     plt.title('Volumen de Agua V_t')
@@ -644,5 +767,3 @@ for i, intensidad in enumerate(intensidades):
 
     plt.tight_layout()
     plt.show()
-
-"""A continuacion para la conclusion vamos a agregar un grafico con todos los metodos juntos en un solo grafico asi podemos comparar."""
