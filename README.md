@@ -1,5 +1,5 @@
 
-# Modelacion Numerica - TrabajoPractico (Simulación de Inundación en un Sótano)
+# Modelacion Numerica - TrabajoPractico
 
 Este proyecto aborda la simulación de inundación en un sótano debido a precipitaciones intensas, con un enfoque en la modelación numérica del sistema utilizando métodos de discretización. Se implementan varias técnicas numéricas para analizar el comportamiento del sistema bajo diferentes condiciones de precipitación y caudal de salida, así como para dimensionar la bomba de desagüe del sótano.
 
