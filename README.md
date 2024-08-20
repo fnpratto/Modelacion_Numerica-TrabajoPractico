@@ -37,10 +37,6 @@ El proyecto se centra en los siguientes objetivos:
 - **Matplotlib**: Biblioteca de Python utilizada para la visualización de los resultados obtenidos en las simulaciones.
 - **Google Colab**: Plataforma utilizada para ejecutar el código y permitir la experimentación interactiva con diferentes esquemas numéricos y parámetros del sistema.
 
-## Ejecución en Google Colab
-
-Puedes ejecutar este proyecto en Google Colab utilizando el siguiente enlace: [Simulación en Google Colab](https://colab.research.google.com/drive/1aegS0eFpOK4E1TY_k5fdbX6qLO1V0hfn?usp=sharing#scrollTo=DrWLKsR67_bZ).
-
 
 ## Visualización
 
